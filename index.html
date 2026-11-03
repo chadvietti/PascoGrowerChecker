@@ -1,0 +1,985 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pasco Grower Checker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* Layout: a grower's weekly check sheet. Status strip first (what needs attention), then one section per check,
+   each a full-width panel with its table or charts. Greenhouse green accent, slightly green-grey neutrals. */
+:root {
+  --bg: #f4f6f2;
+  --panel: #ffffff;
+  --ink: #1d2a1f;
+  --muted: #5c6b5e;
+  --line: #dde3da;
+  --accent: #2f5233;
+  --accent-soft: #e3ece2;
+  --c1: #2f6db5;
+  --c2: #c4682b;
+  --bad: #b3261e; --bad-soft: #fbe6e3;
+  --warn: #8a5a00; --warn-soft: #fbf0d6;
+  --ok: #2e7d32; --ok-soft: #e2f1e3;
+  --info: #45606f; --info-soft: #e5edf1;
+  --font-display: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --font-body: "IBM Plex Sans", "Segoe UI", Arial, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #121713; --panel: #1a211b; --ink: #e5ece4; --muted: #9aab9c; --line: #2c372d;
+    --accent: #8cc191; --accent-soft: #223325; --c1: #6ea8ec; --c2: #eb9a5c;
+    --bad: #f08a80; --bad-soft: #3a1f1c; --warn: #e6b34d; --warn-soft: #362b14;
+    --ok: #7fc784; --ok-soft: #1d3320; --info: #9fbccb; --info-soft: #1d2a31; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #121713; --panel: #1a211b; --ink: #e5ece4; --muted: #9aab9c; --line: #2c372d;
+  --accent: #8cc191; --accent-soft: #223325; --c1: #6ea8ec; --c2: #eb9a5c;
+  --bad: #f08a80; --bad-soft: #3a1f1c; --warn: #e6b34d; --warn-soft: #362b14;
+  --ok: #7fc784; --ok-soft: #1d3320; --info: #9fbccb; --info-soft: #1d2a31; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--bg); color: var(--ink); font: 15px/1.5 var(--font-body); }
+.wrap { max-width: 1180px; margin: 0 auto; padding: 24px 20px 64px; display: flex; flex-direction: column; gap: 22px; }
+h1, h2, h3 { font-family: var(--font-display); margin: 0; text-wrap: balance; }
+h1 { font-size: 28px; font-weight: 700; letter-spacing: -0.01em; }
+h2 { font-size: 19px; font-weight: 600; }
+h3 { font-size: 14px; font-weight: 600; }
+p { margin: 0; }
+.muted { color: var(--muted); }
+.small { font-size: 13px; }
+.num, td.num, th.num { font-variant-numeric: tabular-nums; text-align: right; }
+header.top { display: flex; flex-wrap: wrap; gap: 16px; justify-content: space-between; align-items: flex-end; }
+header.top .meta { font-size: 13px; color: var(--muted); max-width: 70ch; }
+.upload { display: flex; flex-direction: column; gap: 6px; align-items: flex-end; }
+.btn { font: 600 14px var(--font-body); background: var(--accent); color: var(--panel); border: 0; border-radius: 6px; padding: 9px 16px; cursor: pointer; }
+.btn:hover { filter: brightness(1.08); }
+.btn:focus-visible, input:focus-visible + label, summary:focus-visible { outline: 3px solid var(--c1); outline-offset: 2px; }
+.drop { border: 1.5px dashed var(--line); border-radius: 8px; padding: 10px 14px; font-size: 13px; color: var(--muted); text-align: right; }
+.drop.over { border-color: var(--accent); background: var(--accent-soft); }
+.status { font-size: 13px; min-height: 1.2em; }
+.status.err { color: var(--bad); }
+.status.ok { color: var(--ok); }
+.strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: 12px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; display: flex; flex-direction: column; gap: 6px; border-left-width: 5px; }
+.card.bad { border-left-color: var(--bad); } .card.warn { border-left-color: var(--warn); } .card.ok { border-left-color: var(--ok); } .card.info { border-left-color: var(--info); }
+.card .k { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); font-weight: 600; }
+.card .big { font-family: var(--font-display); font-size: 22px; font-weight: 600; line-height: 1.2; }
+.card a { color: inherit; font-size: 13px; }
+section.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 18px 20px; display: flex; flex-direction: column; gap: 14px; }
+.panel-head { display: flex; flex-wrap: wrap; gap: 6px 16px; justify-content: space-between; align-items: baseline; }
+.tablewrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
+th { text-align: left; font-weight: 600; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; padding: 6px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+td { padding: 7px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+tr:last-child td { border-bottom: 0; }
+.pill { display: inline-block; font-size: 12px; font-weight: 600; padding: 1px 8px; border-radius: 999px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.pill.bad { background: var(--bad-soft); color: var(--bad); } .pill.warn { background: var(--warn-soft); color: var(--warn); }
+.pill.ok { background: var(--ok-soft); color: var(--ok); } .pill.info { background: var(--info-soft); color: var(--info); }
+.pill.none { background: transparent; color: var(--muted); border: 1px solid var(--line); }
+.grid-charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 330px), 1fr)); gap: 16px; }
+.chart { position: relative; min-height: 190px; }
+.chart svg { display: block; width: 100%; height: auto; overflow: visible; }
+.chart .ttl { font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+.tip { position: absolute; pointer-events: none; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 4px 14px rgba(0,0,0,.12); padding: 6px 9px; font-size: 12px; white-space: nowrap; z-index: 5; }
+.tip .d { color: var(--muted); margin-bottom: 2px; }
+.sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+.legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 13px; color: var(--muted); }
+.legend .dash { display: inline-block; width: 18px; border-top: 2px dashed var(--muted); vertical-align: 4px; margin-right: 5px; }
+.heat { display: grid; gap: 2px; font-size: 13px; font-variant-numeric: tabular-nums; min-width: 560px; }
+.heat div { padding: 5px 8px; border-radius: 4px; }
+.heat .h { color: var(--muted); font-size: 12px; text-align: center; }
+.heat .k { font-weight: 500; }
+.heat .c { text-align: center; background: var(--bg); color: var(--muted); }
+.heat .c.f1 { background: color-mix(in srgb, var(--c1) 26%, transparent); color: var(--ink); font-weight: 600; }
+.heat .c.f2 { background: color-mix(in srgb, var(--c2) 30%, transparent); color: var(--ink); font-weight: 600; }
+.problems { display: flex; flex-direction: column; gap: 10px; }
+.prob { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.prob:last-child { border-bottom: 0; }
+.prob ul { margin: 4px 0 0; padding-left: 18px; font-size: 13px; color: var(--muted); font-family: var(--font-mono); }
+.prob details summary { cursor: pointer; font-size: 13px; color: var(--muted); }
+.empty { padding: 28px; text-align: center; color: var(--muted); }
+.notes { font-size: 13px; color: var(--muted); display: flex; flex-direction: column; gap: 6px; max-width: 90ch; }
+main[hidden] { display: none !important; }
+.two { display: flex; flex-direction: column; gap: 22px; }
+@media (prefers-reduced-motion: no-preference) { .card, section.panel { transition: border-color .2s; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>Pasco Grower Checker</h1>
+      <p class="meta" id="meta">Reading the latest Master Grower Log…</p>
+    </div>
+    <div class="upload" id="uploadBox" hidden>
+      <input type="file" id="file" accept=".xlsm,.xlsx" hidden>
+      <button class="btn" id="pick" type="button">Upload Master Grower Log</button>
+      <div class="drop" id="drop">or drop the .xlsm here</div>
+      <div class="status" id="status" role="status"></div>
+    </div>
+  </header>
+
+  <section class="panel" id="welcome">
+    <h2>Upload the Master Grower Log to run the checks</h2>
+    <p class="muted">Use the button above or drop the .xlsm anywhere on this page. It's read here in your browser: yield vs the 2027 baseline, compartment gaps, issues, plan capacity and data problems. The page keeps your latest upload, so next time it opens with it.</p>
+  </section>
+  <main id="content" hidden style="display:contents">
+  <div class="strip" id="strip"></div>
+
+  <section class="panel" id="yield">
+    <div class="panel-head"><h2>Yield vs 2027 baseline</h2><p class="muted small" id="yieldSub"></p></div>
+    <div class="tablewrap"><table id="yieldTable"></table></div>
+    <div class="legend"><span><span class="sw" style="background:var(--accent)"></span>Est. lbs / gutter per harvest week</span><span><span class="dash"></span>Seasonal baseline (2027 Projection tab)</span></div>
+    <div class="grid-charts" id="yieldCharts"></div>
+    <h3>Lines, last 4 complete weeks</h3>
+    <div class="tablewrap"><table id="lineTable"></table></div>
+  </section>
+
+  <section class="panel" id="gaps">
+    <div class="panel-head"><h2>Compartment gaps</h2><p class="muted small">Weekly mean of C1 minus C2</p></div>
+    <p class="small muted" id="gapsSub"></p>
+    <div class="legend"><span><span class="sw" style="background:color-mix(in srgb, var(--c1) 40%, transparent)"></span>C1 meaningfully higher</span><span><span class="sw" style="background:color-mix(in srgb, var(--c2) 45%, transparent)"></span>C2 meaningfully higher</span><span><span class="sw" style="background:var(--bg);border:1px solid var(--line)"></span>Within normal range</span></div>
+    <div class="tablewrap"><div class="heat" id="heat"></div></div>
+  </section>
+
+  <section class="panel" id="climate">
+    <div class="panel-head"><h2>Daily climate by compartment</h2><p class="muted small">From Climate Daily (Priva weekly reports)</p></div>
+    <div class="legend"><span><span class="sw" style="background:var(--c1)"></span>C1 (L-01–L-04)</span><span><span class="sw" style="background:var(--c2)"></span>C2 (L-05–L-08)</span><span><span class="sw" style="background:var(--bad-soft);border:1px solid var(--line)"></span>Whole-facility issue</span></div>
+    <div class="grid-charts" id="climateCharts"></div>
+  </section>
+
+  <div class="two">
+    <section class="panel" id="issues">
+      <div class="panel-head"><h2>Issues</h2><p class="muted small">From Issues Log</p></div>
+      <div class="tablewrap"><table id="issueTable"></table></div>
+    </section>
+    <section class="panel" id="capacity">
+      <div class="panel-head"><h2>2027 plan vs line capacity</h2><p class="muted small">From 2027 Projection</p></div>
+      <div id="capBody"></div>
+    </section>
+  </div>
+
+  <section class="panel" id="problems">
+    <div class="panel-head"><h2>Data problems</h2><p class="muted small">Things to fix or confirm in the workbook</p></div>
+    <div class="problems" id="probList"></div>
+  </section>
+
+  </main>
+  <section class="notes" id="method">
+    <p><b>How the numbers are made.</b> Harvests aren't weighed whole. Est. lbs = harvested gutters × that lot's same-day 2-gutter sample lbs/gutter (or the lot's average if no same-day sample), with blank 0-lbs samples left out. Weekly figures weight each entry by its gutters.</p>
+    <p>Yield vs baseline compares each harvest week with the seasonal lbs/gutter on the 2027 Projection tab (Winter Dec–Feb, Spring Mar–May, Summer Jun–Aug, Fall Sep–Nov), including any adjustment %. Flags: ≥15% below = low, 5–15% below = below, ≥10% above = above. A week is shown once harvests exist after its Friday.</p>
+    <p>Compartment gaps are flagged when the weekly C1−C2 gap exceeds the measure's threshold (temp 1.0 °C, daily min 1.5 °C, RH 5%, HD 0.8 g/m³, DLI 1.0 mol, misting 1.5 h) and at least 6 of 7 days point the same way.</p>
+    <p>Everything is read in your browser from the workbook you upload; the page keeps the latest upload so it opens with it next time.</p>
+  </section>
+</div>
+
+<script>
+/* Pasco grower checker — core: read the Master Grower Log (.xlsm/.xlsx) and analyse it.
+   Pure functions, no DOM. Runs in the browser and in Node (for testing). */
+(function (root) {
+  'use strict';
+
+  // ------------------------------------------------------------------ zip
+  async function inflateRaw(bytes) {
+    const ds = new DecompressionStream('deflate-raw');
+    const out = new Response(new Blob([bytes]).stream().pipeThrough(ds));
+    return new Uint8Array(await out.arrayBuffer());
+  }
+  function u16(b, o) { return b[o] | (b[o + 1] << 8); }
+  function u32(b, o) { return (b[o] | (b[o + 1] << 8) | (b[o + 2] << 16) | (b[o + 3] << 24)) >>> 0; }
+
+  function zipIndex(b) {
+    let e = -1;
+    for (let i = b.length - 22; i >= Math.max(0, b.length - 66000); i--) {
+      if (u32(b, i) === 0x06054b50) { e = i; break; }
+    }
+    if (e < 0) throw new Error('This file is not an Excel workbook (.xlsx/.xlsm).');
+    const n = u16(b, e + 10), cdOff = u32(b, e + 16);
+    const dec = new TextDecoder();
+    const idx = {};
+    let p = cdOff;
+    for (let k = 0; k < n; k++) {
+      if (u32(b, p) !== 0x02014b50) throw new Error('The workbook file looks damaged (zip directory).');
+      const method = u16(b, p + 10), csize = u32(b, p + 20), nl = u16(b, p + 28), xl = u16(b, p + 30), cl = u16(b, p + 32);
+      const lho = u32(b, p + 42);
+      const name = dec.decode(b.subarray(p + 46, p + 46 + nl));
+      idx[name] = { method, csize, lho };
+      p += 46 + nl + xl + cl;
+    }
+    return idx;
+  }
+  async function zipRead(b, idx, name) {
+    const ent = idx[name];
+    if (!ent) return null;
+    const p = ent.lho;
+    const start = p + 30 + u16(b, p + 26) + u16(b, p + 28);
+    const data = b.subarray(start, start + ent.csize);
+    const raw = ent.method === 0 ? data : await inflateRaw(data);
+    return new TextDecoder().decode(raw);
+  }
+
+  // ------------------------------------------------------------------ xml helpers
+  function unesc(s) {
+    return s.replace(/&(#x[0-9a-fA-F]+|#\d+|amp|lt|gt|quot|apos);/g, (m, g) => {
+      if (g === 'amp') return '&'; if (g === 'lt') return '<'; if (g === 'gt') return '>';
+      if (g === 'quot') return '"'; if (g === 'apos') return "'";
+      return String.fromCodePoint(g[1] === 'x' ? parseInt(g.slice(2), 16) : parseInt(g.slice(1), 10));
+    });
+  }
+  function textOf(xml) { // joins all <t> runs
+    let s = '', m; const re = /<t(?:\s[^>]*)?>([\s\S]*?)<\/t>|<t(?:\s[^>]*)?\/>/g;
+    while ((m = re.exec(xml))) s += m[1] ? unesc(m[1]) : '';
+    return s;
+  }
+  function colNum(letters) { let n = 0; for (const ch of letters) n = n * 26 + ch.charCodeAt(0) - 64; return n; }
+
+  // rows: {rowNumber: {colNumber: value}} for the wanted columns (Set) and rows >= minRow
+  function sheetRows(xml, sst, wantCols, minRow) {
+    const rows = {};
+    const cre = /<c r="([A-Z]+)(\d+)"([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g;
+    let m;
+    while ((m = cre.exec(xml))) {
+      const r = +m[2]; if (r < minRow) continue;
+      const c = colNum(m[1]); if (wantCols && !wantCols.has(c)) continue;
+      const attrs = m[3], inner = m[4] || '';
+      const tm = /\st="([^"]+)"/.exec(attrs); const t = tm ? tm[1] : 'n';
+      let val = null;
+      if (t === 'inlineStr') val = textOf(inner);
+      else {
+        const vm = /<v>([\s\S]*?)<\/v>/.exec(inner);
+        if (vm) {
+          const v = vm[1];
+          if (t === 's') val = sst[+v];
+          else if (t === 'str') val = unesc(v);
+          else if (t === 'b') val = v === '1';
+          else if (t === 'e') val = null;
+          else { const f = parseFloat(v); val = isNaN(f) ? null : f; }
+        }
+      }
+      if (val === null || val === '') continue;
+      (rows[r] || (rows[r] = {}))[c] = val;
+    }
+    return rows;
+  }
+
+  async function openWorkbook(bytes) {
+    const b = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+    const idx = zipIndex(b);
+    const wbx = await zipRead(b, idx, 'xl/workbook.xml');
+    const rels = await zipRead(b, idx, 'xl/_rels/workbook.xml.rels');
+    if (!wbx || !rels) throw new Error('This file is not an Excel workbook (.xlsx/.xlsm).');
+    const relMap = {}; let m;
+    const rre = /<Relationship\b[^>]*>/g;
+    while ((m = rre.exec(rels))) {
+      const id = /Id="([^"]+)"/.exec(m[0]), tg = /Target="([^"]+)"/.exec(m[0]);
+      if (id && tg) relMap[id[1]] = tg[1];
+    }
+    const sheets = {};
+    const sre = /<sheet\b[^>]*>/g;
+    while ((m = sre.exec(wbx))) {
+      const nm = /name="([^"]+)"/.exec(m[0]), rid = /r:id="([^"]+)"/.exec(m[0]);
+      if (!nm || !rid) continue;
+      let tg = relMap[rid[1]] || '';
+      tg = tg.startsWith('/') ? tg.slice(1) : (tg.startsWith('xl/') ? tg : 'xl/' + tg);
+      sheets[unesc(nm[1])] = tg;
+    }
+    let sst = [];
+    const ssx = await zipRead(b, idx, 'xl/sharedStrings.xml');
+    if (ssx) { const sire = /<si>([\s\S]*?)<\/si>/g; while ((m = sire.exec(ssx))) sst.push(textOf(m[1])); }
+    return {
+      names: Object.keys(sheets),
+      async rows(name, cols, minRow) {
+        if (!sheets[name]) return null;
+        const xml = await zipRead(b, idx, sheets[name]);
+        return sheetRows(xml, sst, cols ? new Set(cols) : null, minRow || 1);
+      },
+    };
+  }
+
+  // ------------------------------------------------------------------ dates & small utils
+  function serialToISO(v) {
+    if (typeof v !== 'number' || !isFinite(v) || v < 20000 || v > 80000) return null;
+    const ms = Math.round((v - 25569) * 86400000);
+    return new Date(ms).toISOString().slice(0, 10);
+  }
+  function isoToDate(s) { return new Date(s + 'T00:00:00Z'); }
+  function addDays(iso, n) { const d = isoToDate(iso); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); }
+  function dayDiff(a, b) { return Math.round((isoToDate(a) - isoToDate(b)) / 86400000); }
+  function weekStart(iso) { const d = isoToDate(iso); const wd = (d.getUTCDay() + 6) % 7; d.setUTCDate(d.getUTCDate() - wd); return d.toISOString().slice(0, 10); }
+  function isoWeek(iso) {
+    const d = isoToDate(iso); const wd = (d.getUTCDay() + 6) % 7; d.setUTCDate(d.getUTCDate() - wd + 3);
+    const y = d.getUTCFullYear(); const jan4 = new Date(Date.UTC(y, 0, 4));
+    return 1 + Math.round(((d - jan4) / 86400000 - 3 + ((jan4.getUTCDay() + 6) % 7)) / 7);
+  }
+  function seasonOf(iso) { const m = +iso.slice(5, 7); return m === 12 || m <= 2 ? 'Winter' : m <= 5 ? 'Spring' : m <= 8 ? 'Summer' : 'Fall'; }
+  const SEASONS = ['Winter', 'Spring', 'Summer', 'Fall'];
+  function str(v) { return v === null || v === undefined ? '' : String(v).trim(); }
+  function num(v) { return typeof v === 'number' && isFinite(v) ? v : (typeof v === 'string' && v.trim() !== '' && isFinite(+v) ? +v : null); }
+  function seedFromLot(lot) {
+    const m = /^[^-]+-[A-Za-z0-9]+-(\d{2})(\d{2})(\d{2})/.exec(str(lot));
+    if (!m) return null;
+    const mo = +m[1], d = +m[2], y = 2000 + +m[3];
+    if (mo < 1 || mo > 12 || d < 1 || d > 31) return null;
+    const dt = new Date(Date.UTC(y, mo - 1, d));
+    if (dt.getUTCMonth() !== mo - 1) return null;
+    return dt.toISOString().slice(0, 10);
+  }
+  function germOf(seedIso) {
+    if (!seedIso) return '';
+    const wd = (isoToDate(seedIso).getUTCDay() + 6) % 7; // 0 Mon
+    return wd >= 5 ? 'Check' : wd >= 3 ? 'Tower' : 'Germination room';
+  }
+  function quantile(arr, q) { const a = arr.slice().sort((x, y) => x - y); const p = (a.length - 1) * q, lo = Math.floor(p); return a[lo] + (a[Math.ceil(p)] - a[lo]) * (p - lo); }
+
+  // ------------------------------------------------------------------ parse the Master Grower Log
+  const SHEETS = { harvest: 'Harvest Log', issues: 'Issues Log', climate: 'Climate Daily', samples: 'Sample Weighings', lists: 'Lists', proj: '2027 Projection' };
+  const FT2_DEFAULT = 16226.25 / 1470;
+
+  async function parseGrowerLog(bytes, fileName) {
+    const wb = await openWorkbook(bytes);
+    const missing = Object.values(SHEETS).filter((s) => !wb.names.includes(s));
+    if (missing.length) throw new Error('This doesn’t look like the Pasco Master Grower Log: missing tab' + (missing.length > 1 ? 's ' : ' ') + missing.join(', ') + '.');
+
+    // Lists
+    const L = await wb.rows(SHEETS.lists, [1, 2, 3, 6, 7], 5);
+    const lines = {}, varieties = [], codes = {};
+    for (let r = 5; r <= 12; r++) {
+      const row = L[r] || {}; const ln = str(row[1]); if (!ln) continue;
+      lines[ln] = { comp: str(row[2]) || '', ft2: num(row[3]) || FT2_DEFAULT };
+    }
+    for (let r = 5; r <= 24; r++) {
+      const row = L[r] || {}; const v = str(row[6]); if (!v) continue;
+      varieties.push(v); if (str(row[7])) codes[str(row[7]).toUpperCase()] = v;
+    }
+
+    // Sample weighings -> same-day and lot averages (case/space-insensitive keys)
+    const S = await wb.rows(SHEETS.samples, [1, 2, 3, 4, 5], 3);
+    const sameDay = {}, lotAvg = {}, samples = [];
+    for (const r in S) {
+      const row = S[r]; const d = serialToISO(row[1]); const lot = str(row[2]).toUpperCase(), ln = str(row[3]).toUpperCase();
+      const tl = num(row[4]), n = num(row[5]);
+      if (!d || !lot || !(tl > 0) || !(n > 0)) continue;
+      const lpg = tl / n; samples.push({ d, lot, ln, lpg });
+      const k = d + '|' + lot + '|' + ln; (sameDay[k] || (sameDay[k] = [0, 0]))[0] += lpg; sameDay[k][1]++;
+      (lotAvg[lot] || (lotAvg[lot] = [0, 0]))[0] += lpg; lotAvg[lot][1]++;
+    }
+
+    // Harvest Log (inputs only; lbs estimated here the same way the workbook does)
+    const H = await wb.rows(SHEETS.harvest, [1, 2, 3, 5, 9, 11, 13], 6);
+    const harvest = [];
+    for (const r in H) {
+      const row = H[r]; const d = serialToISO(row[1]); if (!d) continue;
+      const lot = str(row[2]), ln = str(row[3]);
+      const k = d + '|' + lot.toUpperCase() + '|' + ln.toUpperCase();
+      let lpg = null, basis = 'N';
+      if (sameDay[k]) { lpg = sameDay[k][0] / sameDay[k][1]; basis = 'S'; }
+      else if (lotAvg[lot.toUpperCase()]) { lpg = lotAvg[lot.toUpperCase()][0] / lotAvg[lot.toUpperCase()][1]; basis = 'L'; }
+      harvest.push({ d, lot, ln, v: str(row[5]), hg: num(row[9]) || 0, sg: num(row[11]) || 0, dol: num(row[13]), lpg, basis, row: +r });
+    }
+
+    // Climate Daily
+    const C = await wb.rows(SHEETS.climate, null, 3);
+    const climate = [];
+    for (const r in C) {
+      const row = C[r]; const d = serialToISO(row[1]); const comp = str(row[2]); if (!d || !comp) continue;
+      const g = (c) => num(row[c]);
+      climate.push({ d, comp, t24: g(3), tday: g(4), tnight: g(5), tmin: g(6), rh: g(7), hd: g(8), dli: g(9), parn: g(10), co2: g(11), mist: g(12), leaf: g(13), rad: g(14), lamp: g(15) });
+    }
+
+    // Issues Log
+    const I = await wb.rows(SHEETS.issues, [1, 2, 3, 4, 5, 6, 7, 8, 9], 6);
+    const issues = [];
+    for (const r in I) {
+      const row = I[r]; const s = serialToISO(row[1]); if (!s) continue;
+      issues.push({ start: s, end: serialToISO(row[2]) || '', applies: str(row[3]), cat: str(row[4]), what: str(row[5]), impact: str(row[6]), action: str(row[7]), by: str(row[8]), status: str(row[9]), row: +r });
+    }
+
+    // 2027 Projection: baseline (row after "Variety" header), plan (12 rows after first "Month" header), capacity inputs
+    const P = await wb.rows(SHEETS.proj, null, 1);
+    const prow = Object.keys(P).map(Number).sort((a, b) => a - b);
+    const baseline = []; let planRow = null, linesN = 8, gpl = 1470;
+    const hdrRow = prow.find((r) => str(P[r][1]) === 'Variety');
+    if (hdrRow) {
+      for (let i = 0; i < 20; i++) {
+        const r = hdrRow + 1 + i, row = P[r];
+        if (!row || num(row[2]) === null) break;
+        const name = varieties[i] || str(row[1]) || ('Variety ' + (i + 1));
+        baseline.push({ v: name, Winter: num(row[2]), Spring: num(row[3]), Summer: num(row[4]), Fall: num(row[5]), adj: num(row[7]) || 0, dol: num(row[8]) });
+      }
+    }
+    planRow = prow.find((r) => str(P[r][1]) === 'Month');
+    const plan = [];
+    if (planRow) {
+      for (let i = 1; i <= 12; i++) {
+        const row = P[planRow + i] || {}; const m = serialToISO(row[1]);
+        const g = baseline.map((b, j) => num(row[3 + j]) || 0);
+        plan.push({ m: m || null, g });
+      }
+    }
+    for (const r of prow) {
+      if (str(P[r][1]) === 'Lines' && num(P[r][2])) linesN = num(P[r][2]);
+      if (str(P[r][1]) === 'Gutters / line' && num(P[r][2])) gpl = num(P[r][2]);
+    }
+
+    // sample outliers per variety (by lot code), 3×IQR fences
+    const byVar = {};
+    for (const s of samples) {
+      const code = (s.lot.split('-')[1] || '').toUpperCase(); const v = codes[code]; if (!v) continue;
+      (byVar[v] || (byVar[v] = [])).push(s);
+    }
+    const outliers = [];
+    for (const v in byVar) {
+      const a = byVar[v].map((s) => s.lpg); if (a.length < 20) continue;
+      const q1 = quantile(a, 0.25), q3 = quantile(a, 0.75), iqr = q3 - q1;
+      for (const s of byVar[v]) if (s.lpg > q3 + 3 * iqr || s.lpg < q1 - 3 * iqr) outliers.push({ d: s.d, lot: s.lot, ln: s.ln, v, lpg: +s.lpg.toFixed(2), lo: +(q1 - 3 * iqr).toFixed(2), hi: +(q3 + 3 * iqr).toFixed(2) });
+    }
+    outliers.sort((a, b) => (a.d < b.d ? 1 : -1));
+
+    const sd = samples.map((s) => s.d).sort();
+    return {
+      fileName: fileName || '', uploadedAt: new Date().toISOString(),
+      lines, varieties, harvest, climate, issues, baseline, plan, linesN, gpl,
+      sampleInfo: { n: samples.length, first: sd[0] || '', last: sd[sd.length - 1] || '' },
+      outliers: outliers.slice(0, 50), outlierCount: outliers.length,
+    };
+  }
+
+  // ------------------------------------------------------------------ storage (de)serialisation
+  const HCOLS = ['d', 'lot', 'ln', 'v', 'hg', 'sg', 'dol', 'lpg', 'basis', 'row'];
+  const CCOLS = ['d', 'comp', 't24', 'tday', 'tnight', 'tmin', 'rh', 'hd', 'dli', 'parn', 'co2', 'mist', 'leaf', 'rad', 'lamp'];
+  function enc(v) { return v === null || v === undefined ? '' : (typeof v === 'number' ? String(Math.round(v * 1000) / 1000) : String(v).replace(/[|\n\r]/g, ' ')); }
+  function toLines(rows, cols) { return rows.map((o) => cols.map((c) => enc(o[c])).join('|')).join('\n'); }
+  function fromLines(text, cols, numeric) {
+    if (!text) return [];
+    return text.split('\n').map((line) => {
+      const p = line.split('|'); const o = {};
+      cols.forEach((c, i) => { const s = p[i] === undefined ? '' : p[i]; o[c] = numeric.has(c) ? (s === '' ? null : +s) : s; });
+      return o;
+    });
+  }
+  const HNUM = new Set(['hg', 'sg', 'dol', 'lpg', 'row']);
+  const CNUM = new Set(CCOLS.slice(2));
+  const CHUNK = 1500;
+  function serialize(model) {
+    const v = 'u' + Date.now().toString(36);
+    const hc = [], cc = [];
+    for (let i = 0; i < model.harvest.length; i += CHUNK) hc.push({ v, rows: toLines(model.harvest.slice(i, i + CHUNK), HCOLS) });
+    for (let i = 0; i < model.climate.length; i += CHUNK) cc.push({ v, rows: toLines(model.climate.slice(i, i + CHUNK), CCOLS) });
+    const meta = {
+      v, fileName: model.fileName, uploadedAt: model.uploadedAt, harvestChunks: hc.length, climateChunks: cc.length,
+      json: JSON.stringify({ lines: model.lines, varieties: model.varieties, issues: model.issues, baseline: model.baseline, plan: model.plan,
+        linesN: model.linesN, gpl: model.gpl, sampleInfo: model.sampleInfo, outliers: model.outliers, outlierCount: model.outlierCount }),
+    };
+    return { meta, harvestChunks: hc, climateChunks: cc };
+  }
+  function deserialize(meta, hChunks, cChunks) {
+    const j = JSON.parse(meta.json);
+    return Object.assign(j, {
+      fileName: meta.fileName, uploadedAt: meta.uploadedAt,
+      harvest: [].concat(...hChunks.map((c) => fromLines(c.rows, HCOLS, HNUM))),
+      climate: [].concat(...cChunks.map((c) => fromLines(c.rows, CCOLS, CNUM))),
+    });
+  }
+
+  // ------------------------------------------------------------------ analysis
+  const GAP_METRICS = [
+    { k: 't24', label: 'Temp 24h avg', unit: '°C', thr: 1.0, dp: 1 },
+    { k: 'tnight', label: 'Temp night avg', unit: '°C', thr: 1.0, dp: 1 },
+    { k: 'tmin', label: 'Temp daily min', unit: '°C', thr: 1.5, dp: 1 },
+    { k: 'rh', label: 'RH 24h avg', unit: '%', thr: 5, dp: 0 },
+    { k: 'hd', label: 'HD 24h avg', unit: 'g/m³', thr: 0.8, dp: 1 },
+    { k: 'dli', label: 'DLI 24h', unit: 'mol/m²/d', thr: 1.0, dp: 1 },
+    { k: 'mist', label: 'Misting', unit: 'h/d', thr: 1.5, dp: 1 },
+  ];
+  const YIELD_LOW = -0.15, YIELD_BELOW = -0.05, YIELD_ABOVE = 0.10;
+
+  function analyze(m) {
+    const base = {}; m.baseline.forEach((b) => { base[b.v] = b; });
+    const baseFor = (v, iso) => { const b = base[v]; if (!b) return null; const x = b[seasonOf(iso)]; return x == null ? null : x * (1 + (b.adj || 0)); };
+    const compOf = (ln) => (m.lines[ln] || {}).comp || '';
+
+    // --- harvest enrichment
+    const H = m.harvest.map((h) => {
+      const seed = seedFromLot(h.lot);
+      return Object.assign({}, h, { comp: compOf(h.ln), seed, germ: germOf(seed), lbs: h.lpg != null ? h.hg * h.lpg : null, wk: weekStart(h.d), exp: baseFor(h.v, h.d) });
+    });
+    const lastHarvest = H.reduce((a, h) => (h.d > a ? h.d : a), '');
+
+    // --- weekly yield vs baseline by variety
+    const wkMap = {};
+    for (const h of H) {
+      if (!(h.hg > 0) || h.lpg == null) continue;
+      const k = h.v + '|' + h.wk; const o = wkMap[k] || (wkMap[k] = { v: h.v, wk: h.wk, g: 0, lbs: 0, expG: 0, exp: 0, n: 0 });
+      o.g += h.hg; o.lbs += h.lbs; o.n++;
+      if (h.exp != null) { o.expG += h.hg; o.exp += h.hg * h.exp; }
+    }
+    const weeks = Object.values(wkMap).map((o) => {
+      const lpg = o.lbs / o.g, expv = o.expG ? o.exp / o.expG : null;
+      return Object.assign(o, { lpg, base: expv, diff: expv ? lpg / expv - 1 : null });
+    }).sort((a, b) => (a.wk < b.wk ? -1 : a.wk > b.wk ? 1 : a.v < b.v ? -1 : 1));
+    const allWeeks = [...new Set(weeks.map((w) => w.wk))].sort();
+    // a week counts as complete once harvests exist on a later day than its Friday
+    const completeWeeks = allWeeks.filter((w) => lastHarvest > addDays(w, 4));
+    const latestWk = completeWeeks[completeWeeks.length - 1] || allWeeks[allWeeks.length - 1] || null;
+    const latest = weeks.filter((w) => w.wk === latestWk);
+
+    // --- line × variety, last 4 complete weeks vs baseline
+    const last4 = completeWeeks.slice(-4);
+    const lvMap = {};
+    for (const h of H) {
+      if (!last4.includes(h.wk) || !(h.hg > 0) || h.lpg == null) continue;
+      const k = h.ln + '|' + h.v; const o = lvMap[k] || (lvMap[k] = { ln: h.ln, comp: h.comp, v: h.v, g: 0, lbs: 0, expG: 0, exp: 0, n: 0 });
+      o.g += h.hg; o.lbs += h.lbs; o.n++; if (h.exp != null) { o.expG += h.hg; o.exp += h.hg * h.exp; }
+    }
+    const lineVar = Object.values(lvMap).map((o) => {
+      const lpg = o.lbs / o.g, expv = o.expG ? o.exp / o.expG : null;
+      return Object.assign(o, { lpg, base: expv, diff: expv ? lpg / expv - 1 : null });
+    }).sort((a, b) => (a.ln < b.ln ? -1 : a.ln > b.ln ? 1 : a.v < b.v ? -1 : 1));
+
+    // --- compartment gaps (weekly, C1 − C2)
+    const byDay = {};
+    for (const c of m.climate) (byDay[c.d] || (byDay[c.d] = {}))[c.comp] = c;
+    const days = Object.keys(byDay).sort();
+    const cWeeks = [...new Set(days.map(weekStart))].sort();
+    const gaps = [];
+    for (const wk of cWeeks) {
+      const wd = days.filter((d) => weekStart(d) === wk);
+      for (const mt of GAP_METRICS) {
+        const c1 = [], c2 = [], diffs = [];
+        for (const d of wd) {
+          const a = byDay[d].C1 ? byDay[d].C1[mt.k] : null, b = byDay[d].C2 ? byDay[d].C2[mt.k] : null;
+          if (a != null) c1.push(a); if (b != null) c2.push(b);
+          if (a != null && b != null) diffs.push(a - b);
+        }
+        const mean = (x) => (x.length ? x.reduce((s, y) => s + y, 0) / x.length : null);
+        const md = mean(diffs);
+        const same = Math.max(diffs.filter((x) => x > 0).length, diffs.filter((x) => x < 0).length);
+        const flag = diffs.length >= 5 && Math.abs(md) >= mt.thr && same >= Math.min(6, diffs.length - 1);
+        gaps.push({ wk, k: mt.k, c1: mean(c1), c2: mean(c2), avg: c1.length && c2.length ? (mean(c1) + mean(c2)) / 2 : mean(c1.length ? c1 : c2), diff: md, same, n: diffs.length, flag });
+      }
+    }
+    const latestCWk = cWeeks.filter((w) => days.filter((d) => weekStart(d) === w).length >= 5).slice(-1)[0] || cWeeks[cWeeks.length - 1] || null;
+
+    // --- issues: affected harvest entries
+    const issues = m.issues.map((iss) => {
+      const end = iss.end || iss.start;
+      const hits = H.filter((h) => h.seed && iss.start <= h.d && end >= h.seed && (
+        iss.applies === 'Whole facility' || iss.applies === h.comp || iss.applies === h.ln ||
+        (iss.applies === 'Germination room' && h.germ === 'Germination room') || (iss.applies === 'Towers' && h.germ === 'Tower')));
+      const lots = [...new Set(hits.map((h) => h.lot))];
+      return Object.assign({}, iss, { endCalc: end, entries: hits.length, lots: lots.length, open: /open|monitor/i.test(iss.status) || !iss.status });
+    });
+
+    // --- capacity (2027 plan)
+    const capacity = m.plan.filter((p) => p.m).map((p) => {
+      const need = p.g.reduce((s, g, j) => s + g * ((m.baseline[j] || {}).dol || 0), 0);
+      const d = isoToDate(p.m); const dim = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
+      const avail = m.linesN * m.gpl * dim;
+      const lbs = p.g.reduce((s, g, j) => { const b = m.baseline[j]; const x = b ? b[seasonOf(p.m)] : null; return s + (x == null ? 0 : g * x * (1 + (b.adj || 0))); }, 0);
+      return { m: p.m, gutters: p.g.reduce((s, g) => s + g, 0), need, avail, util: avail ? need / avail : null, lbs };
+    });
+    const planned = capacity.some((c) => c.gutters > 0);
+
+    // --- data problems
+    const problems = [];
+    const add = (sev, area, title, detail, items) => problems.push({ sev, area, title, detail, items: items || [] });
+    const recentCut = lastHarvest ? addDays(lastHarvest, -27) : '';
+    const noSample = H.filter((h) => h.hg > 0 && h.basis === 'N');
+    const noSampleRecent = noSample.filter((h) => h.d >= recentCut);
+    if (noSample.length) add(noSampleRecent.length ? 'warn' : 'info', 'Harvest', `${noSample.length} harvest entries have no sample weighing for their lot`,
+      `Their lbs can't be estimated, so they're left out of yield. ${noSampleRecent.length} are from the last 4 weeks.`,
+      noSampleRecent.slice(-12).reverse().map((h) => `${h.d} · ${h.ln} · ${h.lot} · ${h.hg} gutters (Harvest Log row ${h.row})`));
+    const lotOnly = H.filter((h) => h.hg > 0 && h.basis === 'L');
+    if (lotOnly.length) add('info', 'Harvest', `${lotOnly.length} harvest entries use the lot's average instead of a same-day sample`,
+      'No sample was weighed for that lot on that line and day, so the lot’s other weighings are used.', []);
+    const noDol = H.filter((h) => !(h.dol > 0));
+    if (noDol.length) add('warn', 'Harvest', `${noDol.length} harvest entries have no days on line`, 'Lb/ft²/yr and the climate window can’t be worked out for them.', noDol.slice(-10).map((h) => `${h.d} · ${h.ln} · ${h.lot} (row ${h.row})`));
+    const badSeed = H.filter((h) => !h.seed);
+    if (badSeed.length) add('warn', 'Harvest', `${badSeed.length} lot numbers don't contain a readable seed date`, 'Expected 06-CODE-mmddyy. Seed date, germ method and issue matching need it.', badSeed.slice(-10).map((h) => `${h.d} · ${h.lot} (row ${h.row})`));
+    const wkSeed = H.filter((h) => h.germ === 'Check');
+    if (wkSeed.length) add('info', 'Harvest', `${wkSeed.length} lots were seeded on a weekend`, 'Germ method shows Check for these: confirm tower or germination room.', [...new Set(wkSeed.map((h) => h.lot))].slice(0, 10));
+    const unkVar = [...new Set(H.filter((h) => h.v && !base[h.v]).map((h) => h.v))];
+    if (unkVar.length) add('info', 'Harvest', `Varieties with no 2027 baseline: ${unkVar.join(', ')}`, 'They’re left out of the yield-vs-baseline check. Add them to Lists and the 2027 Projection tab to include them.', []);
+    const unkLine = [...new Set(H.filter((h) => h.ln && !m.lines[h.ln]).map((h) => h.ln))];
+    if (unkLine.length) add('warn', 'Harvest', `Lines not set up on Lists: ${unkLine.join(', ')}`, 'They have no compartment, so they get no climate or compartment issues.', []);
+    const seen = {}; let reps = 0;
+    for (const h of H) { const k = [h.d, h.lot, h.ln, h.hg, h.sg].join('|'); seen[k] = (seen[k] || 0) + 1; if (seen[k] === 2) reps++; }
+    if (reps) add('info', 'Harvest', `${reps} harvest entries appear more than once on the same day`, 'Same date, lot, line and gutter counts. Usually two carts of the same size; check if one is a double entry.', []);
+    // climate
+    if (days.length) {
+      const miss = days.filter((d) => !(byDay[d].C1 && byDay[d].C2));
+      if (miss.length) add('warn', 'Climate', `${miss.length} days have climate for only one compartment`, 'Import the other compartment’s Priva export for those weeks.', miss.slice(-10).map((d) => `${d}: has ${Object.keys(byDay[d]).join(', ')}`));
+      const gapsD = []; for (let i = 1; i < days.length; i++) { const g = dayDiff(days[i], days[i - 1]); if (g > 1) gapsD.push(`${addDays(days[i - 1], 1)} to ${addDays(days[i], -1)} (${g - 1} days)`); }
+      if (gapsD.length) add('warn', 'Climate', `${gapsD.length} gap${gapsD.length > 1 ? 's' : ''} in the climate record`, 'No Priva data for these dates.', gapsD);
+      const lastC = days[days.length - 1];
+      if (lastHarvest && dayDiff(lastHarvest, lastC) > 3) add('warn', 'Climate', `Climate data ends ${lastC}, ${dayDiff(lastHarvest, lastC)} days before the latest harvest`, 'Run ImportPrivaCSV with the newest weekly reports so recent crops get their climate.', []);
+      const blank = m.climate.filter((c) => c.t24 == null || c.dli == null);
+      if (blank.length) add('info', 'Climate', `${blank.length} climate rows are missing temperature or DLI`, '', blank.slice(-8).map((c) => `${c.d} ${c.comp}`));
+    } else add('warn', 'Climate', 'No climate data in Climate Daily', 'Run ImportPrivaCSV.', []);
+    if (m.outlierCount) add('info', 'Samples', `${m.outlierCount} sample weighings look out of range for their variety`, 'More than 3× the usual spread from the middle of that variety’s weighings. Often a typo in Total lbs or gutters weighed.',
+      m.outliers.slice(0, 10).map((o) => `${o.d} · ${o.ln} · ${o.lot}: ${o.lpg} lbs/gutter (normal ${Math.max(0, o.lo)}–${o.hi})`));
+    const staleOpen = issues.filter((i) => i.open && dayDiff(lastHarvest || i.start, i.start) > 30);
+    if (staleOpen.length) add('info', 'Issues', `${staleOpen.length} issues have been open for more than 30 days`, 'Close them or add an end date if they’re resolved.', staleOpen.map((i) => `${i.start} · ${i.applies} · ${i.what.slice(0, 70)}`));
+    if (!m.baseline.length) add('warn', 'Projection', 'No seasonal baseline found on the 2027 Projection tab', 'Yield vs baseline needs it.', []);
+    const order = { warn: 0, info: 1 };
+    problems.sort((a, b) => order[a.sev] - order[b.sev]);
+
+    return { H, weeks, allWeeks, completeWeeks, latestWk, latest, last4, lineVar, gaps, cWeeks, latestCWk, byDay, days, issues, capacity, planned, problems, lastHarvest, baseFor };
+  }
+
+  const api = { openWorkbook, parseGrowerLog, serialize, deserialize, analyze, GAP_METRICS, YIELD_LOW, YIELD_BELOW, YIELD_ABOVE, SEASONS, seasonOf, weekStart, isoWeek, addDays, seedFromLot };
+  if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.GrowerCore = api;
+})(typeof window !== 'undefined' ? window : globalThis);
+
+</script>
+<script>
+(() => {
+  const G = window.GrowerCore;
+  const $ = (id) => document.getElementById(id);
+  const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const fd = (iso) => { if (!iso) return '—'; const [y, m, d] = iso.split('-'); return `${MON[+m - 1]} ${+d}`; };
+  const fdy = (iso) => { if (!iso) return '—'; const [y, m, d] = iso.split('-'); return `${MON[+m - 1]} ${+d}, ${y}`; };
+  const f1 = (x) => (x == null || !isFinite(x) ? '—' : x.toFixed(1));
+  const f2 = (x) => (x == null || !isFinite(x) ? '—' : x.toFixed(2));
+  const f0 = (x) => (x == null || !isFinite(x) ? '—' : Math.round(x).toLocaleString('en-US'));
+  const pct = (x) => (x == null || !isFinite(x) ? '—' : (x > 0 ? '+' : x < 0 ? '−' : '') + Math.abs(Math.round(x * 100)) + '%');
+  const el = (tag, attrs, ...kids) => {
+    const e = document.createElement(tag);
+    if (attrs) for (const k in attrs) { if (k === 'class') e.className = attrs[k]; else if (k === 'style') e.setAttribute('style', attrs[k]); else e.setAttribute(k, attrs[k]); }
+    for (const k of kids.flat()) if (k != null) e.append(k.nodeType ? k : document.createTextNode(String(k)));
+    return e;
+  };
+  const sevOfDiff = (d) => (d == null ? 'none' : d <= G.YIELD_LOW ? 'bad' : d <= G.YIELD_BELOW ? 'warn' : d >= G.YIELD_ABOVE ? 'ok' : 'none');
+  const sevLabel = { bad: 'Low', warn: 'Below', ok: 'Above', none: 'On track' };
+  const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+
+  // ---------------------------------------------------------------- SVG line chart
+  function lineChart(host, opt) {
+    host.replaceChildren();
+    if (opt.title) host.append(el('div', { class: 'ttl' }, opt.title));
+    const pts = opt.series.flatMap((s) => s.pts);
+    if (!pts.length) { host.append(el('p', { class: 'muted small' }, 'No data yet.')); return; }
+    const W = Math.max(280, host.clientWidth || 320), H = opt.height || 170;
+    const xs = pts.map((p) => +p[0]), ys = pts.map((p) => p[1]);
+    let x0 = Math.min(...xs), x1 = Math.max(...xs); if (x0 === x1) { x0 -= 86400000 * 3; x1 += 86400000 * 3; }
+    let y0 = Math.min(...ys), y1 = Math.max(...ys);
+    if (opt.zero) y0 = Math.min(0, y0);
+    const pad = (y1 - y0) * 0.12 || 1; y0 = opt.zero ? y0 : y0 - pad; y1 += pad;
+    const ticks = niceTicks(y0, y1, 4); y0 = Math.min(y0, ticks[0]); y1 = Math.max(y1, ticks[ticks.length - 1]);
+    const dp = Math.max(0, ...ticks.map((t) => (String(t).split('.')[1] || '').length));
+    const ml = 8 + Math.max(...ticks.map((t) => t.toFixed(dp).length)) * 7, mr = 10, mt = 6, mb = 22;
+    const X = (x) => ml + ((x - x0) / (x1 - x0)) * (W - ml - mr), Y = (y) => mt + (1 - (y - y0) / (y1 - y0)) * (H - mt - mb);
+    const NS = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(NS, 'svg'); svg.setAttribute('viewBox', `0 0 ${W} ${H}`); svg.setAttribute('role', 'img');
+    svg.setAttribute('aria-label', (opt.title || 'Chart'));
+    const mk = (tag, a) => { const e = document.createElementNS(NS, tag); for (const k in a) e.setAttribute(k, a[k]); return e; };
+    for (const b of opt.bands || []) {
+      const a = Math.max(x0, +b[0]), z = Math.min(x1, +b[1]); if (z <= a) continue;
+      svg.append(mk('rect', { x: X(a), y: mt, width: X(z) - X(a), height: H - mt - mb, fill: css('--bad-soft') }));
+    }
+    for (const t of ticks) {
+      svg.append(mk('line', { x1: ml, x2: W - mr, y1: Y(t), y2: Y(t), stroke: css('--line'), 'stroke-width': 1 }));
+      const tx = mk('text', { x: ml - 6, y: Y(t) + 4, 'text-anchor': 'end', 'font-size': 11, fill: css('--muted') }); tx.textContent = t.toFixed(dp); svg.append(tx);
+    }
+    const xt = opt.xTicks || autoXTicks(x0, x1, W);
+    xt.forEach((x, i) => {
+      const anchor = i === 0 && X(x) - ml < 20 ? 'start' : (i === xt.length - 1 && W - mr - X(x) < 20 ? 'end' : 'middle');
+      const tx = mk('text', { x: X(x), y: H - 6, 'text-anchor': anchor, 'font-size': 11, fill: css('--muted') });
+      tx.textContent = opt.xFmt ? opt.xFmt(x) : fd(new Date(x).toISOString().slice(0, 10)); svg.append(tx);
+    });
+    for (const s of opt.series) {
+      if (!s.pts.length) continue;
+      const d = s.pts.map((p, i) => (i ? 'L' : 'M') + X(+p[0]).toFixed(1) + ',' + Y(p[1]).toFixed(1)).join('');
+      svg.append(mk('path', { d, fill: 'none', stroke: s.color, 'stroke-width': s.dash ? 1.6 : 2, 'stroke-dasharray': s.dash ? '5 4' : '', 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }));
+      if (!s.dash) { const last = s.pts[s.pts.length - 1]; svg.append(mk('circle', { cx: X(+last[0]), cy: Y(last[1]), r: 3, fill: s.color })); }
+    }
+    const rule = mk('line', { y1: mt, y2: H - mb, stroke: css('--muted'), 'stroke-width': 1, opacity: 0 }); svg.append(rule);
+    const hit = mk('rect', { x: ml, y: 0, width: W - ml - mr, height: H, fill: 'transparent' }); svg.append(hit);
+    host.append(svg);
+    const tip = el('div', { class: 'tip', hidden: '' }); host.append(tip);
+    const allX = [...new Set(xs)].sort((a, b) => a - b);
+    hit.addEventListener('mousemove', (ev) => {
+      const r = svg.getBoundingClientRect(); const mx = (ev.clientX - r.left) * (W / r.width);
+      let best = allX[0]; for (const x of allX) if (Math.abs(X(x) - mx) < Math.abs(X(best) - mx)) best = x;
+      rule.setAttribute('x1', X(best)); rule.setAttribute('x2', X(best)); rule.setAttribute('opacity', 0.5);
+      tip.replaceChildren(el('div', { class: 'd' }, opt.tipX ? opt.tipX(best) : fdy(new Date(best).toISOString().slice(0, 10))));
+      for (const s of opt.series) {
+        const p = s.pts.find((q) => +q[0] === best); if (!p) continue;
+        tip.append(el('div', null, el('span', { class: 'sw', style: `background:${s.color}` }), `${s.name} ${opt.yFmt ? opt.yFmt(p[1]) : f1(p[1])}`));
+      }
+      tip.hidden = false;
+      const hr = host.getBoundingClientRect(); const left = ev.clientX - hr.left + 12;
+      tip.style.left = Math.min(left, host.clientWidth - tip.offsetWidth - 4) + 'px'; tip.style.top = Math.max(0, ev.clientY - hr.top - tip.offsetHeight - 8) + 'px';
+    });
+    hit.addEventListener('mouseleave', () => { tip.hidden = true; rule.setAttribute('opacity', 0); });
+  }
+  function niceTicks(a, b, n) {
+    const span = b - a || 1, step0 = span / n, mag = Math.pow(10, Math.floor(Math.log10(step0)));
+    const step = [1, 2, 2.5, 5, 10].map((m) => m * mag).find((s) => s >= step0) || 10 * mag;
+    const t = []; for (let v = Math.floor(a / step) * step; v <= b + step * 0.001; v += step) t.push(+v.toFixed(6));
+    return t;
+  }
+  function autoXTicks(x0, x1, W) {
+    const n = Math.max(2, Math.min(6, Math.floor(W / 90))); const t = [];
+    for (let i = 0; i < n; i++) t.push(x0 + ((x1 - x0) * i) / (n - 1));
+    return t.map((x) => { const d = new Date(x); d.setUTCHours(0, 0, 0, 0); return +d; });
+  }
+  const D = (iso) => new Date(iso + 'T00:00:00Z');
+
+  // ---------------------------------------------------------------- render
+  let MODEL = null, A = null;
+  function render() {
+    if (!MODEL) return;
+    A = G.analyze(MODEL);
+    $('welcome').hidden = true; $('content').hidden = false;
+    const m = MODEL, a = A;
+    const hd = m.harvest.map((h) => h.d).sort(), cd = m.climate.map((c) => c.d).sort();
+    $('meta').textContent = `From ${m.fileName || 'the Master Grower Log'}, uploaded ${fdy((m.uploadedAt || '').slice(0, 10))}. ` +
+      `${m.harvest.length.toLocaleString('en-US')} harvest entries (${fd(hd[0])} – ${fdy(hd[hd.length - 1])}), ` +
+      `${(m.sampleInfo.n || 0).toLocaleString('en-US')} sample weighings, climate ${fd(cd[0])} – ${fdy(cd[cd.length - 1])}.`;
+    renderStrip(); renderYield(); renderGaps(); renderClimate(); renderIssues(); renderCapacity(); renderProblems();
+  }
+
+  function renderStrip() {
+    const a = A, s = $('strip'); s.replaceChildren();
+    const card = (sev, k, big, sub, href) => el('div', { class: 'card ' + sev }, el('div', { class: 'k' }, k), el('div', { class: 'big' }, big), el('div', { class: 'small muted' }, sub), el('a', { href }, 'See details'));
+    const low = a.latest.filter((w) => w.diff != null && w.diff <= G.YIELD_LOW), below = a.latest.filter((w) => w.diff != null && w.diff > G.YIELD_LOW && w.diff <= G.YIELD_BELOW);
+    s.append(card(low.length ? 'bad' : below.length ? 'warn' : 'ok', 'Yield vs baseline',
+      a.latestWk ? (low.length ? `${low.length} of ${a.latest.length} varieties low` : below.length ? `${below.length} below baseline` : 'On or above baseline') : 'No harvests yet',
+      a.latestWk ? `Week ${G.isoWeek(a.latestWk)} (${fd(a.latestWk)})${low.length ? ': ' + low.map((w) => w.v).join(', ') : ''}` : '', '#yield'));
+    const fl = a.gaps.filter((g) => g.wk === a.latestCWk && g.flag);
+    s.append(card(fl.length >= 3 ? 'warn' : fl.length ? 'info' : 'ok', 'Compartment gaps',
+      a.latestCWk ? `${fl.length} of ${G.GAP_METRICS.length} measures differ` : 'No climate yet',
+      a.latestCWk ? `Week ${G.isoWeek(a.latestCWk)}${fl.length ? ': ' + fl.map((g) => G.GAP_METRICS.find((x) => x.k === g.k).label).join(', ') : ''}` : '', '#gaps'));
+    const w = a.problems.filter((p) => p.sev === 'warn').length, n = a.problems.length - w;
+    s.append(card(w ? 'warn' : n ? 'info' : 'ok', 'Data problems', w ? `${w} to fix` : n ? 'Nothing to fix' : 'All clear', `${n} to note`, '#problems'));
+    const open = a.issues.filter((i) => i.open), over = a.capacity.filter((c) => c.util > 1);
+    s.append(card(over.length ? 'bad' : open.length ? 'info' : 'ok', 'Issues & capacity',
+      `${open.length} open issue${open.length === 1 ? '' : 's'}`,
+      a.planned ? (over.length ? `${over.length} month${over.length > 1 ? 's' : ''} of the 2027 plan over capacity` : '2027 plan fits the lines') : '2027 plan not entered yet', '#issues'));
+  }
+
+  function renderYield() {
+    const a = A, m = MODEL;
+    $('yieldSub').textContent = a.latestWk ? `Latest complete week: ${G.isoWeek(a.latestWk)} (${fd(a.latestWk)} – ${fd(G.addDays(a.latestWk, 6))})` : '';
+    const t = $('yieldTable'); t.replaceChildren();
+    t.append(el('thead', null, el('tr', null, el('th', null, 'Variety'), el('th', { class: 'num' }, 'Est. lbs / gutter'), el('th', { class: 'num' }, 'Baseline'), el('th', { class: 'num' }, 'Vs baseline'), el('th', { class: 'num' }, 'Prev. week'), el('th', { class: 'num' }, 'Gutters'))));
+    const tb = el('tbody');
+    const prevWk = a.completeWeeks[a.completeWeeks.indexOf(a.latestWk) - 1];
+    const vars = [...new Set(a.weeks.map((w) => w.v))].sort((x, y) => (m.varieties.indexOf(x) + 99 * (m.varieties.indexOf(x) < 0)) - (m.varieties.indexOf(y) + 99 * (m.varieties.indexOf(y) < 0)));
+    for (const v of vars) {
+      const w = a.latest.find((x) => x.v === v), p = a.weeks.find((x) => x.v === v && x.wk === prevWk);
+      if (!w) continue;
+      const sev = sevOfDiff(w.diff);
+      tb.append(el('tr', null, el('td', null, v), el('td', { class: 'num' }, f2(w.lpg)), el('td', { class: 'num' }, f2(w.base)),
+        el('td', { class: 'num' }, el('span', { class: 'pill ' + sev }, w.diff == null ? 'No baseline' : `${pct(w.diff)} ${sevLabel[sev]}`)),
+        el('td', { class: 'num' }, p ? f2(p.lpg) : '—'), el('td', { class: 'num' }, f0(w.g))));
+    }
+    if (!tb.children.length) tb.append(el('tr', null, el('td', { colspan: 6, class: 'empty' }, 'No harvests with a sample weighing yet.')));
+    t.append(tb);
+
+    const host = $('yieldCharts'); host.replaceChildren();
+    const jobs = [];
+    for (const v of vars) {
+      const ws = a.weeks.filter((w) => w.v === v && a.completeWeeks.includes(w.wk));
+      if (!ws.length) continue;
+      const div = el('div', { class: 'chart' }); host.append(div);
+      const pts = ws.map((w) => [+D(w.wk), w.lpg]);
+      const bpts = ws.filter((w) => w.base != null).map((w) => [+D(w.wk), w.base]);
+      jobs.push([div, { title: v, series: [{ name: 'Est.', color: css('--accent'), pts }, { name: 'Baseline', color: css('--muted'), pts: bpts, dash: true }],
+        yFmt: f2, zero: false, tipX: (x) => 'Week of ' + fdy(new Date(x).toISOString().slice(0, 10)) }]);
+    }
+    jobs.forEach(([d, o]) => lineChart(d, o));
+
+    const lt = $('lineTable'); lt.replaceChildren();
+    lt.append(el('thead', null, el('tr', null, el('th', null, 'Line'), el('th', null, 'Comp.'), el('th', null, 'Variety'), el('th', { class: 'num' }, 'Est. lbs / gutter'), el('th', { class: 'num' }, 'Baseline'), el('th', { class: 'num' }, 'Vs baseline'), el('th', { class: 'num' }, 'Entries'))));
+    const lb = el('tbody');
+    for (const o of a.lineVar) {
+      const sev = sevOfDiff(o.diff);
+      lb.append(el('tr', null, el('td', null, o.ln), el('td', null, o.comp || '—'), el('td', null, o.v), el('td', { class: 'num' }, f2(o.lpg)), el('td', { class: 'num' }, f2(o.base)),
+        el('td', { class: 'num' }, el('span', { class: 'pill ' + sev }, o.diff == null ? 'No baseline' : `${pct(o.diff)} ${sevLabel[sev]}`)), el('td', { class: 'num' }, o.n)));
+    }
+    if (!lb.children.length) lb.append(el('tr', null, el('td', { colspan: 7, class: 'empty' }, 'Not enough complete weeks yet.')));
+    lt.append(lb);
+  }
+
+  function renderGaps() {
+    const a = A; const host = $('heat'); host.replaceChildren();
+    const weeks = a.cWeeks;
+    if (!weeks.length) { host.append(el('div', { class: 'empty' }, 'No climate data yet.')); $('gapsSub').textContent = ''; return; }
+    const shown = weeks.slice(-10);
+    host.style.gridTemplateColumns = `minmax(150px, 1.4fr) repeat(${shown.length}, minmax(64px, 1fr))`;
+    host.append(el('div', { class: 'h' }));
+    for (const w of shown) host.append(el('div', { class: 'h' }, `Wk ${G.isoWeek(w)}`, el('br'), fd(w)));
+    for (const mt of G.GAP_METRICS) {
+      host.append(el('div', { class: 'k' }, `${mt.label} `, el('span', { class: 'muted small' }, `(${mt.unit})`)));
+      for (const w of shown) {
+        const g = a.gaps.find((x) => x.wk === w && x.k === mt.k);
+        const txt = g && g.diff != null ? (g.diff > 0 ? '+' : g.diff < 0 ? '−' : '') + Math.abs(g.diff).toFixed(mt.dp) : '—';
+        const c = el('div', { class: 'c' + (g && g.flag ? (g.diff > 0 ? ' f1' : ' f2') : ''), title: g ? `C1 ${f1(g.c1)} · C2 ${f1(g.c2)} ${mt.unit} · ${g.same} of ${g.n} days same direction` : '' }, txt);
+        host.append(c);
+      }
+    }
+    const fl = a.gaps.filter((g) => g.wk === a.latestCWk && g.flag).map((g) => {
+      const mt = G.GAP_METRICS.find((x) => x.k === g.k); return `${mt.label}: C1 ${f1(g.c1)} vs C2 ${f1(g.c2)} ${mt.unit}`;
+    });
+    $('gapsSub').textContent = fl.length ? `Week ${G.isoWeek(a.latestCWk)}: ${fl.join(' · ')}. Hover a cell for both values.` : `No meaningful gaps in week ${G.isoWeek(a.latestCWk)}. Hover a cell for both values.`;
+  }
+
+  function renderClimate() {
+    const a = A, host = $('climateCharts'); host.replaceChildren();
+    const bands = A.issues.filter((i) => i.applies === 'Whole facility' && /climate|heat|cool|vent|curtain|light|mist|humid/i.test(i.cat + ' ' + i.what)).map((i) => [D(i.start), D(G.addDays(i.endCalc, 1))]);
+    const metrics = [['t24', 'Temp 24h avg (°C)'], ['tnight', 'Temp night avg (°C)'], ['tmin', 'Temp daily min (°C)'], ['hd', 'HD 24h avg (g/m³)'], ['rh', 'RH 24h avg (%)'], ['dli', 'DLI 24h (mol/m²/d)'], ['mist', 'Misting (h/d)'], ['parn', 'PAR night sum (mol/m²/d)']];
+    const days = a.days.slice(-56); const jobs = [];
+    for (const [k, label] of metrics) {
+      const s1 = days.filter((d) => a.byDay[d].C1 && a.byDay[d].C1[k] != null).map((d) => [+D(d), a.byDay[d].C1[k]]);
+      const s2 = days.filter((d) => a.byDay[d].C2 && a.byDay[d].C2[k] != null).map((d) => [+D(d), a.byDay[d].C2[k]]);
+      const div = el('div', { class: 'chart' }); host.append(div);
+      jobs.push([div, { title: label, series: [{ name: 'C1', color: css('--c1'), pts: s1 }, { name: 'C2', color: css('--c2'), pts: s2 }], bands }]);
+    }
+    jobs.forEach(([d, o]) => lineChart(d, o));
+  }
+
+  function renderIssues() {
+    const t = $('issueTable'); t.replaceChildren();
+    t.append(el('thead', null, el('tr', null, el('th', null, 'Dates'), el('th', null, 'Applies to'), el('th', null, 'What happened'), el('th', { class: 'num' }, 'Crops affected'), el('th', null, 'Status'))));
+    const tb = el('tbody');
+    const rows = A.issues.slice().sort((x, y) => (x.open === y.open ? (x.start < y.start ? 1 : -1) : x.open ? -1 : 1));
+    for (const i of rows) {
+      tb.append(el('tr', null, el('td', null, i.end && i.end !== i.start ? `${fd(i.start)} – ${fd(i.end)}` : fd(i.start)), el('td', null, i.applies || '—'),
+        el('td', null, i.what, i.cat ? el('div', { class: 'muted small' }, i.cat) : null),
+        el('td', { class: 'num' }, `${i.lots} lots`, el('div', { class: 'muted small' }, `${i.entries} entries`)),
+        el('td', null, el('span', { class: 'pill ' + (i.open ? 'warn' : 'none') }, i.status || 'Open'))));
+    }
+    if (!rows.length) tb.append(el('tr', null, el('td', { colspan: 5, class: 'empty' }, 'No issues logged.')));
+    t.append(tb);
+  }
+
+  function renderCapacity() {
+    const host = $('capBody'); host.replaceChildren();
+    if (!A.planned) {
+      host.append(el('p', { class: 'muted' }, 'No planned gutters entered on the 2027 Projection tab yet. Once you fill in section 2 there and upload again, this shows projected lbs and line utilisation by month, and flags any month over capacity.'));
+      return;
+    }
+    const t = el('table');
+    t.append(el('thead', null, el('tr', null, el('th', null, 'Month'), el('th', { class: 'num' }, 'Gutters'), el('th', { class: 'num' }, 'Projected lbs'), el('th', { class: 'num' }, 'Line use'))));
+    const tb = el('tbody');
+    for (const c of A.capacity) {
+      const sev = c.util > 1 ? 'bad' : c.util > 0.9 ? 'warn' : 'none';
+      const [y, mo] = c.m.split('-');
+      tb.append(el('tr', null, el('td', null, `${MON[+mo - 1]} ${y}`), el('td', { class: 'num' }, f0(c.gutters)), el('td', { class: 'num' }, f0(c.lbs)), el('td', { class: 'num' }, el('span', { class: 'pill ' + sev }, c.util == null ? '—' : Math.round(c.util * 100) + '%'))));
+    }
+    t.append(tb); host.append(el('div', { class: 'tablewrap' }, t));
+    host.append(el('p', { class: 'muted small' }, 'Line use = Σ planned gutters × days on line, ÷ (lines × gutters per line × days in month). Over 100% means the plan doesn’t fit.'));
+  }
+
+  function renderProblems() {
+    const host = $('probList'); host.replaceChildren();
+    if (!A.problems.length) { host.append(el('p', { class: 'muted' }, 'Nothing found.')); return; }
+    for (const p of A.problems) {
+      const body = el('div', null, el('div', null, el('b', null, p.title)), p.detail ? el('div', { class: 'small muted' }, p.detail) : null);
+      if (p.items.length) {
+        const first = p.items.slice(0, 3), rest = p.items.slice(3);
+        body.append(el('ul', null, first.map((x) => el('li', null, x))));
+        if (rest.length) { const d = el('details', null, el('summary', null, `${rest.length} more`), el('ul', null, rest.map((x) => el('li', null, x)))); body.append(d); }
+      }
+      host.append(el('div', { class: 'prob' }, el('div', null, el('span', { class: 'pill ' + (p.sev === 'warn' ? 'warn' : 'info') }, p.sev === 'warn' ? 'Fix' : 'Note'), el('div', { class: 'small muted', style: 'margin-top:4px' }, p.area)), body));
+    }
+  }
+
+  let rt, lastW = 0; new ResizeObserver(() => { const w = document.body.clientWidth; if (Math.abs(w - lastW) < 8) return; lastW = w; clearTimeout(rt); rt = setTimeout(() => { if (A) { renderYield(); renderClimate(); } }, 150); }).observe(document.body);
+
+  // ---------------------------------------------------------------- storage + upload
+  let db = null, canWrite = false, local = false;
+  // Fallback when hosted outside Claude (e.g. GitHub Pages): keep the last upload in this browser only.
+  const localDb = {
+    doc: (path) => {
+      const k = 'pgc:' + path;
+      return {
+        get: async () => { let v = null; try { v = localStorage.getItem(k); } catch (e) {} return { exists: v != null, data: () => JSON.parse(v) }; },
+        set: async (d) => { try { localStorage.setItem(k, JSON.stringify(d)); } catch (e) { const err = new Error('full'); err.code = 'quota_exceeded'; throw err; } },
+        delete: async () => { try { localStorage.removeItem(k); } catch (e) {} },
+      };
+    },
+  };
+  const status = (msg, cls) => { const s = $('status'); s.textContent = msg; s.className = 'status' + (cls ? ' ' + cls : ''); };
+
+  async function loadSaved() {
+    const timer = setTimeout(() => { if (!MODEL) $('meta').textContent = 'Can’t reach the saved data right now. You can still upload the workbook to check it.'; }, 10000);
+    try {
+      const ms = await db.doc('snap/meta').get();
+      if (!ms.exists) { clearTimeout(timer); showEmpty(); return; }
+      const meta = ms.data();
+      const hc = [], cc = [];
+      for (let i = 0; i < meta.harvestChunks; i++) { const d = await db.doc('harvest/c' + i).get(); if (!d.exists || d.data().v !== meta.v) throw new Error('stale'); hc.push(d.data()); }
+      for (let i = 0; i < meta.climateChunks; i++) { const d = await db.doc('climate/c' + i).get(); if (!d.exists || d.data().v !== meta.v) throw new Error('stale'); cc.push(d.data()); }
+      clearTimeout(timer);
+      MODEL = G.deserialize(meta, hc, cc); render();
+    } catch (e) {
+      clearTimeout(timer);
+      $('meta').textContent = 'The saved data couldn’t be read (an upload may have been interrupted). Upload the workbook again.';
+    }
+  }
+  function showEmpty() {
+    $('meta').textContent = 'No workbook uploaded yet. Upload the Pasco Master Grower Log (.xlsm) to run the checks.';
+  }
+
+  async function save(model) {
+    const s = G.serialize(model);
+    let old = null; try { const o = await db.doc('snap/meta').get(); old = o.exists ? o.data() : null; } catch (e) {}
+    for (let i = 0; i < s.harvestChunks.length; i++) await db.doc('harvest/c' + i).set(s.harvestChunks[i]);
+    for (let i = 0; i < s.climateChunks.length; i++) await db.doc('climate/c' + i).set(s.climateChunks[i]);
+    await db.doc('snap/meta').set(s.meta);
+    if (old) {
+      for (let i = s.harvestChunks.length; i < old.harvestChunks; i++) await db.doc('harvest/c' + i).delete();
+      for (let i = s.climateChunks.length; i < old.climateChunks; i++) await db.doc('climate/c' + i).delete();
+    }
+  }
+
+  async function handleFile(f) {
+    if (!f) return;
+    if (!/\.xls[xm]$/i.test(f.name)) { status('Pick the Master Grower Log (.xlsm or .xlsx).', 'err'); return; }
+    status('Reading ' + f.name + '…');
+    try {
+      const model = await G.parseGrowerLog(new Uint8Array(await f.arrayBuffer()), f.name);
+      MODEL = model; render();
+      if (db && canWrite) {
+        status('Checked. Saving so it opens with this data next time…');
+        try { await save(model); status(local ? 'Checked and saved in this browser.' : 'Checked and saved.', 'ok'); }
+        catch (e) { status(e && e.code === 'quota_exceeded' ? 'Checked, but the page’s storage is full, so this upload wasn’t saved.' : 'Checked, but saving failed. The results above are only for this visit.', 'err'); }
+      } else status('Checked. Not saved: only the page owner’s uploads are kept.', 'ok');
+    } catch (e) {
+      status((e && e.message) || 'Couldn’t read that file.', 'err');
+    }
+  }
+
+  $('pick').addEventListener('click', () => $('file').click());
+  $('file').addEventListener('change', (e) => { handleFile(e.target.files[0]); e.target.value = ''; });
+  const drop = $('drop');
+  ['dragenter', 'dragover'].forEach((t) => document.addEventListener(t, (e) => { e.preventDefault(); drop.classList.add('over'); }));
+  ['dragleave', 'drop'].forEach((t) => document.addEventListener(t, (e) => { e.preventDefault(); if (t === 'drop' || e.target === document.documentElement) drop.classList.remove('over'); }));
+  document.addEventListener('drop', (e) => { const f = e.dataTransfer && e.dataTransfer.files[0]; drop.classList.remove('over'); handleFile(f); });
+
+  (async () => {
+    const hasClaude = window.claude && typeof window.claude.use === 'function';
+    if (!hasClaude) { db = localDb; canWrite = true; local = true; $('uploadBox').hidden = false; loadSaved(); return; }
+    let user = null;
+    try { [db, user] = await Promise.all([window.claude.use('db'), window.claude.use('user')]); } catch (e) {}
+    let owner = false;
+    try { owner = user ? !!(await Promise.resolve(user.isOwner())) : false; } catch (e) {}
+    canWrite = owner;
+    $('uploadBox').hidden = false;
+    if (!owner) $('pick').textContent = 'Check a workbook';
+    if (db) loadSaved(); else showEmpty();
+  })();
+})();
+</script>
+</body>
+</html>
